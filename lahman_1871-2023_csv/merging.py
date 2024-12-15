@@ -15,84 +15,60 @@ file_paths = {
     'awards': 'lahman_1871-2023_csv/lahman_1871-2023_csv/AwardsPlayers.csv',
     'hall_of_fame': 'lahman_1871-2023_csv/lahman_1871-2023_csv/HallOfFame.csv',
     'people': 'lahman_1871-2023_csv/lahman_1871-2023_csv/People.csv',
+    # 'batting_post': 'lahman_1871-2023_csv/lahman_1871-2023_csv/BattingPost.csv',
+    # 'pitching_post': 'lahman_1871-2023_csv/lahman_1871-2023_csv/PitchingPost.csv',
 }
 
 # Load all datasets
-batting_df = load_csv(file_paths['batting'])
-pitching_df = load_csv(file_paths['pitching'])
-fielding_df = load_csv(file_paths['fielding'])
-awards_df = load_csv(file_paths['awards'])
-hall_of_fame_df = load_csv(file_paths['hall_of_fame'])
-people_df = load_csv(file_paths['people'], encoding='latin1')
+batting = load_csv(file_paths['batting'])
+pitching = load_csv(file_paths['pitching'])
+fielding = load_csv(file_paths['fielding'])
+awards = load_csv(file_paths['awards'])
+hof = load_csv(file_paths['hall_of_fame'])
+people = load_csv(file_paths['people'], encoding='latin1')
+# batting_post = load_csv(file_paths['batting_post'])
+# pitching_post = load_csv(file_paths['pitching_post'])
 
-# Merge batting and pitching stats
-batting_pitching_df = pd.merge(
-    batting_df, pitching_df,
-    on=['playerID', 'yearID'],
-    how='outer',
-    suffixes=('_bat', '_pit')
-)
+# Aggregate batting stats
+batting_agg = batting.groupby('playerID').agg({
+    'G': 'sum', 'AB': 'sum', 'R': 'sum', 'H': 'sum',
+    '2B': 'sum', '3B': 'sum', 'HR': 'sum', 'RBI': 'sum',
+    'BB': 'sum', 'SO': 'sum'
+}).reset_index()
 
-# Identify columns common for merging fielding stats
-common_columns = list(set(batting_pitching_df.columns) & set(fielding_df.columns))
-required_columns = ['playerID', 'yearID']
-additional_columns = ['teamID', 'lgID']
-merge_columns = [col for col in required_columns + additional_columns if col in common_columns]
+# Aggregate pitching stats
+pitching_agg = pitching.groupby('playerID').agg({
+    'W': 'sum', 'L': 'sum', 'G': 'sum', 'GS': 'sum',
+    'CG': 'sum', 'SV': 'sum', 'SO': 'sum', 'ERA': 'mean'
+}).reset_index()
 
-# Merge fielding stats carefully
-batting_pitching_fielding_df = pd.merge(
-    batting_pitching_df, fielding_df,
-    on=merge_columns,
-    how='outer'
-)
+# Aggregate fielding stats
+fielding_agg = fielding.groupby('playerID').agg({
+    'G': 'sum', 'PO': 'sum', 'A': 'sum', 'E': 'sum'
+}).reset_index()
 
-# Merge awards with careful checks
-if 'playerID' in awards_df.columns and 'yearID' in awards_df.columns:
-    batting_pitching_fielding_awards_df = pd.merge(
-        batting_pitching_fielding_df, awards_df,
-        on=['playerID', 'yearID'],
-        how='outer'
-    )
-else:
-    batting_pitching_fielding_awards_df = batting_pitching_fielding_df
+# Aggregate awards count
+awards_agg = awards.groupby('playerID')['awardID'].count().reset_index()
+awards_agg.rename(columns={'awardID': 'AwardsCount'}, inplace=True)
 
-# Merge Hall of Fame information
-full_df = pd.merge(
-    batting_pitching_fielding_awards_df, hall_of_fame_df,
-    on='playerID',
-    how='outer'
-)
+# Career duration from People.csv
+people['debut'] = pd.to_datetime(people['debut'], errors='coerce')
+people['finalGame'] = pd.to_datetime(people['finalGame'], errors='coerce')
+people['CareerLength'] = (people['finalGame'] - people['debut']).dt.days / 365.25
+people_agg = people[['playerID', 'CareerLength']]
 
-# Merge player demographics and bios
-if 'playerID' in people_df.columns:
-    full_df = pd.merge(full_df, people_df, on='playerID', how='outer')
+# Merge datasets
+data = batting_agg.merge(pitching_agg, on='playerID', how='outer')
+data = data.merge(fielding_agg, on='playerID', how='outer')
+data = data.merge(awards_agg, on='playerID', how='left')
+data = data.merge(people_agg, on='playerID', how='left')
+data = data.merge(hof[['playerID', 'inducted']], on='playerID', how='left')
 
-# Feature engineering: Add calculated stats (handle zero or missing AB and IPouts)
-full_df['batting_average'] = full_df['H'] / full_df['AB']
-full_df['batting_average'] = full_df['batting_average'].fillna(0)  # Avoid NaNs
-full_df['slugging_percentage'] = (
-    (full_df['H'] + full_df['2B'] + 2 * full_df['3B'] + 3 * full_df['HR']) / full_df['AB']
-)
-full_df['slugging_percentage'] = full_df['slugging_percentage'].fillna(0)
-full_df['on_base_percentage'] = (
-    (full_df['H'] + full_df['BB'] + full_df['HBP']) /
-    (full_df['AB'] + full_df['BB'] + full_df['HBP'] + full_df['SF'])
-)
-full_df['on_base_percentage'] = full_df['on_base_percentage'].fillna(0)
-full_df['ERA'] = (full_df['ER'] * 9) / (full_df['IPouts'] / 3)
-full_df['ERA'] = full_df['ERA'].fillna(0)
+# Replace NaNs with 0 for stats and convert HoF status to binary
+data.fillna(0, inplace=True)
+data['inducted'] = data['inducted'].apply(lambda x: 1 if x == 'Y' else 0)
 
-# Handle NaN values in remaining columns
-full_df = full_df.fillna('')
+# Save merged dataset
+data.to_csv("lahman_1871-2023_csv/HallOfFameDataset.csv", index=False)
 
-# Optimize data types
-for col in full_df.select_dtypes(include=['float64']).columns:
-    full_df[col] = pd.to_numeric(full_df[col], downcast='float')
-for col in full_df.select_dtypes(include=['int64']).columns:
-    full_df[col] = pd.to_numeric(full_df[col], downcast='integer')
-
-# Save the final combined DataFrame
-output_file = 'lahman_1871-2023_csv/Combined_Baseball_Stats_Optimized.csv'
-full_df.to_csv(output_file, index=False)
-
-print(f"Combined dataset saved to {output_file}")
+print(f"Combined dataset saved to lahman.")
