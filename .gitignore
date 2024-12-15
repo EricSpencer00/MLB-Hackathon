@@ -1,3 +1,10 @@
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__
+venv
+
 # Logs
 logs
 *.log
