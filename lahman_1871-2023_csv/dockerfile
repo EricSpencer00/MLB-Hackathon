@@ -1,0 +1,8 @@
+FROM gcr.io/deeplearning-platform-release/sklearn-cpu.0-23
+WORKDIR /
+
+COPY trainer /trainer
+
+RUN pip install -U scikit-learn==0.24.2 joblib google-cloud-storage pandas numpy google-cloud-bigquery
+
+ENTRYPOINT [ "python", "-m", "trainer.train" ]
