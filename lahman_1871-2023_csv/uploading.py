@@ -3,8 +3,8 @@ from google.cloud import storage
 client = storage.Client()
 
 bucket_name = "lahman_data"
-file_name = "lahman_1871-2023_csv/Combined_Batting_Pitching.csv"
-destination_blob_name = "combined/Combined_Batting_Pitching.csv"
+file_name = "lahman_1871-2023_csv/HallOfFameDataset.csv"
+destination_blob_name = "combined/HallOfFameDataset.csv"
 
 bucket = client.bucket(bucket_name)
 blob = bucket.blob(destination_blob_name)
