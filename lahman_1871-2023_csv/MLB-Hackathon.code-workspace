@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "MLB-Hackathon",
+			"path": ".."
+		},
+		{
+			"name": "lahman_1871-2023_csv",
+			"path": "../../../../Downloads/lahman_1871-2023_csv/lahman_1871-2023_csv"
+		}
+	],
+	"settings": {}
+}
